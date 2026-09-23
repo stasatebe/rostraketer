@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Röstraketer – valet 2026</title>
+<meta name="description" content="Var kryssade väljarna förbi partiernas toppnamn? Personröster per valdistrikt i valet 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+:root {
+  --blck: #1d2433;        /* bläck */
+  --blck-2: #4a5263;
+  --papper: #ffffff;
+  --yta: #e7eaee;
+  --linje: #c9ced6;
+  --gul: #f4d94b;         /* riksdagens valsedel */
+  --bla: #a9cbe9;         /* regionens valsedel */
+  --vit: #ffffff;         /* kommunens valsedel */
+  --sedel: var(--gul);
+  --parti: #8a8f98;
+  --tom: #d6d9de;
+  --font: "Archivo", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font); color: var(--blck); background: var(--yta);
+  display: grid; grid-template-columns: 380px 1fr; height: 100%;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  font-size: 15px; line-height: 1.45;
+}
+:focus-visible { outline: 3px solid var(--blck); outline-offset: 2px; }
+
+/* ---------- panel ---------- */
+#panel {
+  background: var(--papper); overflow-y: auto; border-right: 1px solid var(--linje);
+  display: flex; flex-direction: column;
+}
+#panel > header { padding: 26px 24px 18px; background: var(--sedel); border-bottom: 1px solid var(--linje); transition: background .25s; }
+h1 {
+  font-stretch: 68%; font-weight: 800; font-size: 46px; line-height: .95;
+  letter-spacing: -.01em; margin: 0 0 10px;
+}
+#panel > header p { margin: 0; max-width: 32ch; color: var(--blck); }
+.kontroller { padding: 18px 24px 8px; display: grid; gap: 18px; }
+
+#valflikar { display: flex; gap: 6px; }
+#valflikar button {
+  flex: 1; font: inherit; font-weight: 600; font-stretch: 85%; color: var(--blck);
+  border: 1px solid var(--linje); border-radius: 3px; padding: 9px 6px 8px; cursor: pointer;
+  position: relative;
+}
+#valflikar button[data-val="RD"] { background: var(--gul); }
+#valflikar button[data-val="RF"] { background: var(--bla); }
+#valflikar button[data-val="KF"] { background: var(--vit); }
+#valflikar button[aria-pressed="true"] { border-color: var(--blck); box-shadow: inset 0 -3px 0 var(--blck); }
+#valflikar button:disabled { opacity: .35; cursor: not-allowed; }
+
+.falt { display: grid; gap: 6px; }
+.falt > span, legend { font-weight: 600; font-size: 13px; color: var(--blck-2); }
+.partival { display: flex; align-items: center; gap: 8px; }
+.partival::before {
+  content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--parti); flex: none;
+}
+select {
+  flex: 1; font: inherit; color: var(--blck); padding: 8px 10px; border: 1px solid var(--linje);
+  border-radius: 3px; background: var(--papper);
+}
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
+fieldset legend { margin-bottom: 4px; padding: 0; }
+.radio { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; padding: 3px 0; }
+.radio input { margin: 3px 0 0; accent-color: var(--blck); }
+input[type=range] { width: 100%; accent-color: var(--blck); }
+
+#detalj { padding: 10px 24px 28px; flex: 1; }
+#detalj h2 { font-stretch: 75%; font-size: 22px; line-height: 1.1; margin: 14px 0 4px; }
+#detalj .ingress { margin: 0 0 12px; color: var(--blck-2); font-size: 14px; }
+
+/* röstraket-listan */
+.raketer { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linje); }
+.raketer button {
+  width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0;
+  border-bottom: 1px solid var(--linje); padding: 10px 2px; cursor: pointer;
+  display: grid; grid-template-columns: 38px 1fr auto; gap: 2px 10px; align-items: baseline;
+}
+.raketer button:hover { background: #f5f6f8; }
+.plats { font-stretch: 62%; font-weight: 800; font-size: 28px; line-height: 1; grid-row: span 2; text-align: right; }
+.plats small { display: block; font-size: 10px; font-stretch: 100%; font-weight: 500; color: var(--blck-2); margin-top: 2px; }
+.knamn { font-weight: 600; }
+.kryss { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.kmeta { font-size: 13px; color: var(--blck-2); grid-column: 2 / 4; }
+.sparr { font-size: 12px; font-weight: 600; background: var(--blck); color: #fff; border-radius: 2px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+
+/* valsedeln */
+.valsedel {
+  background: var(--sedel); border: 1px solid rgba(29,36,51,.25); border-radius: 2px;
+  padding: 16px 16px 12px; margin-top: 14px; position: relative;
+  box-shadow: 0 1px 0 rgba(29,36,51,.15), 0 8px 18px -12px rgba(29,36,51,.5);
+}
+.valsedel .stang {
+  position: absolute; top: 8px; right: 8px; border: 0; background: none; font: inherit;
+  font-size: 20px; line-height: 1; cursor: pointer; color: var(--blck); padding: 4px 8px;
+}
+.valsedel .distrikt { font-size: 13px; color: var(--blck-2); margin: 0 30px 2px 0; }
+.valsedel .partinamn { font-stretch: 70%; font-weight: 800; font-size: 26px; line-height: 1; margin: 0 0 12px; }
+.valsedel ol { list-style: none; margin: 0 0 12px; padding: 0; border-top: 1px solid rgba(29,36,51,.3); }
+.valsedel li {
+  display: grid; grid-template-columns: 22px 26px 1fr auto; gap: 8px; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid rgba(29,36,51,.3);
+}
+.ruta { width: 20px; height: 20px; border: 1.5px solid var(--blck); background: #fff; position: relative; }
+.ruta.kryssad::before, .ruta.kryssad::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 24px; height: 2.5px; background: var(--blck);
+  border-radius: 2px; transform: translate(-50%, -50%) rotate(45deg);
+}
+.ruta.kryssad::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.valsedel .nr { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.valsedel .antal { font-variant-numeric: tabular-nums; font-weight: 600; }
+.valsedel dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 0; font-size: 14px; }
+.valsedel dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.valsedel .fotnot { font-size: 12px; color: var(--blck-2); margin: 10px 0 0; }
+
+.lank { font: inherit; background: none; border: 0; padding: 0; color: var(--blck); text-decoration: underline; cursor: pointer; }
+.meddelande { border-left: 4px solid var(--blck); padding: 8px 12px; background: #f5f6f8; margin-top: 14px; }
+.meddelande code { font-size: 13px; }
+
+/* ---------- karta ---------- */
+#karta { position: relative; min-height: 0; }
+#map { position: absolute; inset: 0; }
+#legend {
+  position: absolute; right: 12px; bottom: 30px; background: var(--papper); padding: 10px 12px;
+  border: 1px solid var(--linje); border-radius: 3px; font-size: 13px; max-width: 240px;
+}
+#legend summary { font-weight: 600; font-size: 13px; line-height: 1.25; cursor: pointer; }
+#legend details[open] summary { margin-bottom: 6px; }
+#legend .skala { display: grid; grid-template-columns: 18px 1fr; gap: 3px 8px; align-items: center; }
+#legend i { width: 18px; height: 12px; display: block; border: 1px solid rgba(0,0,0,.12); }
+#tips {
+  position: absolute; pointer-events: none; background: var(--blck); color: #fff; font-size: 13px;
+  padding: 6px 9px; border-radius: 3px; max-width: 260px; display: none; z-index: 5; line-height: 1.3;
+}
+#kandbanner {
+  position: absolute; top: 12px; left: 12px; right: 60px; max-width: 520px; background: var(--blck); color: #fff;
+  padding: 10px 14px; border-radius: 3px; display: none; font-size: 14px; z-index: 4;
+}
+#kandbanner button { font: inherit; font-weight: 600; background: #fff; color: var(--blck); border: 0; border-radius: 2px; padding: 4px 10px; margin-top: 6px; cursor: pointer; }
+.maplibregl-ctrl-attrib { font-size: 11px; }
+
+@media (max-width: 820px) {
+  body { display: flex; flex-direction: column; height: auto; min-height: 100%; }
+  #panel { display: contents; }
+  #panel > header { order: 1; padding: 18px 18px 14px; }
+  #karta { order: 2; height: 58vh; flex: none; }
+  .kontroller { order: 3; background: var(--papper); padding: 16px 18px 8px; }
+  #detalj { order: 4; background: var(--papper); padding: 8px 18px 28px; }
+  h1 { font-size: 38px; }
+  #legend { bottom: 26px; right: 8px; max-width: 210px; padding: 7px 9px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<aside id="panel">
+  <header>
+    <h1>Röstraketer</h1>
+    <p>Var kryssade väljarna förbi partiernas toppnamn? Personröster per valdistrikt i valet 2026.</p>
+  </header>
+  <div class="kontroller">
+    <div id="valflikar" role="group" aria-label="Välj val">
+      <button data-val="RD" aria-pressed="true">Riksdag</button>
+      <button data-val="RF" aria-pressed="false">Region</button>
+      <button data-val="KF" aria-pressed="false">Kommun</button>
+    </div>
+    <label class="falt"><span>Parti</span>
+      <div class="partival"><select id="parti"></select></div>
+    </label>
+    <fieldset id="matt">
+      <legend>Färga kartan efter</legend>
+    </fieldset>
+    <label class="falt"><span>Visa distrikt med minst <output id="minut">20</output> kryss för partiet</span>
+      <input id="min" type="range" min="0" max="100" step="5" value="20">
+    </label>
+  </div>
+  <section id="detalj" aria-live="polite"></section>
+</aside>
+<main id="karta">
+  <div id="map" role="region" aria-label="Karta över valdistrikt"></div>
+  <div id="kandbanner"></div>
+  <div id="legend"></div>
+  <div id="tips"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+"use strict";
+const PALETT = ["#f3e6f1", "#e2b9da", "#d688c3", "#c6509e", "#a3206f", "#6e0f4b"];
+const TOM = "#d6d9de";
+const SEDEL = { RD: "var(--gul)", RF: "var(--bla)", KF: "var(--vit)" };
+const fmt = n => n == null ? "–" : Number(n).toLocaleString("sv-SE");
+const pct = n => n == null ? "–" : `${Number(n).toLocaleString("sv-SE", { maximumFractionDigits: 1 })} %`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let TOPP = 3;
+const MATT = {
+  raket: {
+    namn: () => `Kryss längre ner än plats ${TOPP}`,
+    besk: () => `Andel av partiets personröster som gick till kandidater under plats ${TOPP} på listan.`,
+    steg: [0, 10, 20, 30, 45, 60], etiketter: ["under 10 %", "10–20 %", "20–30 %", "30–45 %", "45–60 %", "60 % eller mer"],
+    varde: r => r[2], krav: r => r[0], visa: pct,
+  },
+  plats: {
+    namn: () => "Listplats för den mest kryssade",
+    besk: () => "Var på listan står den kandidat som fick flest kryss i distriktet?",
+    steg: [1, 2, 3, 4, 6, 11], etiketter: ["plats 1", "plats 2", "plats 3", "plats 4–5", "plats 6–10", "plats 11 eller längre ner"],
+    varde: r => r[3], krav: r => r[0], visa: v => `plats ${v}`,
+  },
+  medel: {
+    namn: () => "Genomsnittlig listplats för kryssen",
+    besk: () => "Snittplaceringen på listan för alla kryss partiet fick i distriktet.",
+    steg: [1, 2, 3, 4, 6, 9], etiketter: ["1–2", "2–3", "3–4", "4–6", "6–9", "9 eller högre"],
+    varde: r => r[4], krav: r => r[0], visa: v => `plats ${String(v).replace(".", ",")} i snitt`,
+  },
+  kryss: {
+    namn: () => "Andel av väljarna som kryssade",
+    besk: () => "Hur stor andel av partiets väljare i distriktet som satte ett kryss.",
+    steg: [0, 5, 10, 15, 25, 35], etiketter: ["under 5 %", "5–10 %", "10–15 %", "15–25 %", "25–35 %", "35 % eller mer"],
+    varde: r => r[1] ? Math.round(1000 * r[0] / r[1]) / 10 : null, krav: r => r[1], visa: pct,
+  },
+};
+const KAND_STEG = [0, 2, 5, 10, 20, 35];
+const KAND_ETIKETTER = ["under 2 %", "2–5 %", "5–10 %", "10–20 %", "20–35 %", "35 % eller mer"];
+
+const state = { val: "RD", parti: null, matt: "raket", min: 20, kandidat: null, vald: null };
+let manifest = null, map = null, geo = null, hovered = null;
+const bboxar = new Map(), namnPa = new Map(), cache = new Map();
+const $ = s => document.querySelector(s);
+
+async function hamta(url) {
+  if (cache.has(url)) return cache.get(url);
+  const p = fetch(url).then(r => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); });
+  cache.set(url, p);
+  try { return await p; } catch (e) { cache.delete(url); throw e; }
+}
+const valFil = () => hamta(`${state.val.toLowerCase()}.json`);
+const partiFil = async () => (await valFil()).partier[state.parti] || { k: {}, d: {} };
+const raketFil = async () => (await valFil()).raketer || [];
+const partiMeta = () => manifest.val[state.val].partier.find(p => p.kod === state.parti);
+
+/* ---------------- start ---------------- */
+async function start() {
+  try {
+    [manifest, geo] = await Promise.all([hamta("manifest.json"), hamta("valdistrikt.geojson")]);
+  } catch (e) {
+    $("#detalj").innerHTML = `<div class="meddelande"><strong>Datan hittades inte.</strong><br>
+      Filerna <code>manifest.json</code> och <code>valdistrikt.geojson</code> måste ligga i samma mapp som den här sidan,
+      tillsammans med <code>rd.json</code>, <code>rf.json</code> och <code>kf.json</code>. Sidan fungerar inte om filen öppnas direkt från disken.</div>`;
+    console.error(e);
+    return;
+  }
+  TOPP = manifest.topp ?? 3;
+  for (const f of geo.features) {
+    namnPa.set(f.properties.kod, f.properties.namn);
+    bboxar.set(f.properties.kod, bbox(f.geometry));
+  }
+  lasHash();
+  if (!manifest.val[state.val]) state.val = Object.keys(manifest.val)[0];
+  byggKontroller();
+  initKarta();
+}
+
+function bbox(g) {
+  let b = [180, 90, -180, -90];
+  const ga = c => typeof c[0] === "number"
+    ? (b = [Math.min(b[0], c[0]), Math.min(b[1], c[1]), Math.max(b[2], c[0]), Math.max(b[3], c[1])])
+    : c.forEach(ga);
+  ga(g.coordinates);
+  return b;
+}
+
+function lasHash() {
+  const [val, parti, matt] = decodeURIComponent(location.hash.slice(1)).split("/");
+  if (val && manifest.val[val]) state.val = val;
+  if (parti) state.parti = parti;
+  if (matt && MATT[matt]) state.matt = matt;
+}
+const skrivHash = () => history.replaceState(null, "", `#${state.val}/${state.parti}/${state.matt}`);
+
+/* ---------------- kontroller ---------------- */
+function byggKontroller() {
+  document.querySelectorAll("#valflikar button").forEach(b => {
+    b.disabled = !manifest.val[b.dataset.val];
+    b.onclick = () => bytVal(b.dataset.val);
+  });
+  const fs = $("#matt");
+  for (const [k, m] of Object.entries(MATT)) {
+    const l = document.createElement("label");
+    l.className = "radio";
+    l.innerHTML = `<input type="radio" name="matt" value="${k}"><span>${esc(m.namn())}</span>`;
+    l.querySelector("input").checked = k === state.matt;
+    l.querySelector("input").onchange = () => { state.matt = k; state.kandidat = null; rita(); };
+    fs.appendChild(l);
+  }
+  $("#parti").onchange = e => { state.parti = e.target.value; state.kandidat = null; state.vald = null; rita(); };
+  $("#min").oninput = e => { state.min = +e.target.value; $("#minut").textContent = state.min; rita(false); };
+  fyllPartier();
+}
+
+function fyllPartier() {
+  const partier = manifest.val[state.val].partier;
+  if (!partier.some(p => p.kod === state.parti)) state.parti = partier[0]?.kod;
+  $("#parti").innerHTML = partier.map(p =>
+    `<option value="${esc(p.kod)}">${esc(p.namn)}${p.kort && p.kort !== p.namn ? ` (${esc(p.kort)})` : ""}</option>`).join("");
+  $("#parti").value = state.parti;
+  document.querySelectorAll("#valflikar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.val === state.val));
+  document.documentElement.style.setProperty("--sedel", SEDEL[state.val]);
+}
+
+function bytVal(val) {
+  if (val === state.val) return;
+  const kort = partiMeta()?.kort;
+  state.val = val; state.kandidat = null; state.vald = null;
+  const samma = manifest.val[val].partier.find(p => p.kort === kort);
+  if (samma) state.parti = samma.kod;
+  fyllPartier();
+  rita();
+}
+
+/* ---------------- karta ---------------- */
+function initKarta() {
+  const carto = typ => ["a", "b", "c", "d"].map(s => `https://${s}.basemaps.cartocdn.com/${typ}/{z}/{x}/{y}.png`);
+  map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: {
+        bas: { type: "raster", tiles: carto("light_nolabels"), tileSize: 256,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/">CARTO</a>, data: Valmyndigheten' },
+        etiketter: { type: "raster", tiles: carto("light_only_labels"), tileSize: 256 },
+      },
+      layers: [
+        { id: "bakgrund", type: "background", paint: { "background-color": "#e7eaee" } },
+        { id: "bas", type: "raster", source: "bas" },
+      ],
+    },
+    bounds: [[10.5, 55.2], [24.5, 69.2]], fitBoundsOptions: { padding: 20 },
+    dragRotate: false, pitchWithRotate: false,
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+  map.touchZoomRotate.disableRotation();
+
+  map.on("load", () => {
+    map.addSource("vd", { type: "geojson", data: geo, promoteId: "kod" });
+    map.addLayer({ id: "vd-fyll", type: "fill", source: "vd", paint: { "fill-color": TOM, "fill-opacity": 0.85 } });
+    map.addLayer({ id: "vd-kant", type: "line", source: "vd", paint: {
+      "line-color": ["case", ["boolean", ["feature-state", "vald"], false], "#1d2433", "#ffffff"],
+      "line-width": ["case", ["boolean", ["feature-state", "vald"], false], 2.5,
+        ["boolean", ["feature-state", "hover"], false], 1.6,
+        ["interpolate", ["linear"], ["zoom"], 5, 0.1, 10, 0.6, 13, 1]],
+    } });
+    map.addLayer({ id: "etiketter", type: "raster", source: "etiketter", paint: { "raster-opacity": 0.9 } });
+
+    map.on("mousemove", "vd-fyll", e => {
+      const f = e.features[0];
+      if (hovered !== f.id) {
+        if (hovered != null) map.setFeatureState({ source: "vd", id: hovered }, { hover: false });
+        hovered = f.id;
+        map.setFeatureState({ source: "vd", id: hovered }, { hover: true });
+      }
+      map.getCanvas().style.cursor = "pointer";
+      visaTips(e.point, f.id);
+    });
+    map.on("mouseleave", "vd-fyll", () => {
+      if (hovered != null) map.setFeatureState({ source: "vd", id: hovered }, { hover: false });
+      hovered = null; map.getCanvas().style.cursor = ""; $("#tips").style.display = "none";
+    });
+    map.on("click", "vd-fyll", e => valjDistrikt(e.features[0].id));
+    rita();
+  });
+}
+
+let aktuellaVarden = new Map();
+let legendOppen = !matchMedia("(max-width: 820px)").matches;
+
+async function rita(uppdateraDetalj = true) {
+  if (!map || !map.getSource("vd")) return;
+  skrivHash();
+  const meta = partiMeta();
+  document.documentElement.style.setProperty("--parti", meta?.farg || "#8a8f98");
+  let data;
+  try { data = await partiFil(); } catch (e) { console.error(e); return; }
+
+  const varden = new Map();
+  let steg, etiketter, titel;
+  if (state.kandidat) {
+    const k = state.kandidat;
+    for (const [kod, r] of Object.entries(data.d)) {
+      if (r[1] < state.min) continue;
+      varden.set(kod, Math.round(1000 * (k.d[kod] || 0) / r[1]) / 10);
+    }
+    steg = KAND_STEG; etiketter = KAND_ETIKETTER;
+    titel = `Kryss för ${k.namn}, andel av partiets röster`;
+  } else {
+    const m = MATT[state.matt];
+    for (const [kod, r] of Object.entries(data.d)) {
+      const krav = m.krav(r);
+      const v = m.varde(r);
+      if (krav >= Math.max(state.min, 1) && v != null) varden.set(kod, v);
+    }
+    steg = m.steg; etiketter = m.etiketter; titel = m.namn();
+  }
+  aktuellaVarden = varden;
+
+  map.removeFeatureState({ source: "vd" });
+  for (const [kod, v] of varden) map.setFeatureState({ source: "vd", id: kod }, { v });
+  if (state.vald) map.setFeatureState({ source: "vd", id: state.vald }, { vald: true });
+  if (hovered != null) map.setFeatureState({ source: "vd", id: hovered }, { hover: true });
+  const expr = ["step", ["coalesce", ["feature-state", "v"], -1], TOM];
+  steg.forEach((s, i) => expr.push(s === 0 ? -0.5 : s, PALETT[i]));
+  map.setPaintProperty("vd-fyll", "fill-color", expr);
+
+  $("#legend").innerHTML = `<details${legendOppen ? " open" : ""}><summary>${esc(titel)}</summary><div class="skala">` +
+    etiketter.map((t, i) => `<i style="background:${PALETT[i]}"></i><span>${t}</span>`).join("") +
+    `<i style="background:${TOM}"></i><span>för få röster eller inga data</span></div></details>`;
+  $("#legend details").ontoggle = e => { legendOppen = e.target.open; };
+
+  const banner = $("#kandbanner");
+  if (state.kandidat) {
+    const k = state.kandidat;
+    banner.style.display = "block";
+    banner.innerHTML = `${esc(k.namn)}, plats ${k.pos} för ${esc(meta.kort)} i ${esc(k.krets)}. ` +
+      `${fmt(k.v)} kryss totalt.<br><button type="button">Visa partiet igen</button>`;
+    banner.querySelector("button").onclick = () => { state.kandidat = null; rita(); };
+  } else banner.style.display = "none";
+
+  if (uppdateraDetalj) state.vald ? visaDistrikt(state.vald) : visaRaketer();
+}
+
+function visaTips(punkt, kod) {
+  const t = $("#tips");
+  const v = aktuellaVarden.get(kod);
+  let rad;
+  if (v == null) rad = "för få röster";
+  else if (state.kandidat) rad = `${pct(v)} av partiets röster`;
+  else rad = MATT[state.matt].visa(v);
+  t.innerHTML = `<strong>${esc(namnPa.get(kod) || kod)}</strong><br>${esc(rad)}`;
+  t.style.display = "block";
+  const box = $("#karta").getBoundingClientRect();
+  t.style.left = Math.min(punkt.x + 14, box.width - 270) + "px";
+  t.style.top = (punkt.y + 14) + "px";
+}
+
+/* ---------------- detaljer ---------------- */
+function valjDistrikt(kod) {
+  if (state.vald) map.setFeatureState({ source: "vd", id: state.vald }, { vald: false });
+  state.vald = kod;
+  map.setFeatureState({ source: "vd", id: kod }, { vald: true });
+  visaDistrikt(kod);
+}
+
+async function visaDistrikt(kod) {
+  const data = await partiFil();
+  const meta = partiMeta();
+  const r = data.d[kod];
+  const namn = namnPa.get(kod) || kod;
+  let inne;
+  if (!r) {
+    inne = `<p class="distrikt">${esc(namn)}</p><p class="partinamn">${esc(meta.namn)}</p>
+      <p>Partiet fick inga röster i det här distriktet.</p>`;
+  } else {
+    const topp = r[5].slice().sort((a, b) => b[2] - a[2]);
+    const rader = topp.map((t, i) => `<li><span class="ruta${i === 0 ? " kryssad" : ""}" aria-hidden="true"></span>
+      <span class="nr">${t[1]}</span><span>${esc(data.k[t[0]] || "okänd kandidat")}</span>
+      <span class="antal">${fmt(t[2])}</span></li>`).join("");
+    inne = `<p class="distrikt">${esc(namn)}</p><p class="partinamn">${esc(meta.namn)}</p>
+      ${topp.length ? `<ol aria-label="Mest kryssade kandidater, med listplats och antal kryss">${rader}</ol>` : "<p>Ingen kryssade någon kandidat här.</p>"}
+      <dl>
+        <dt>Röster på partiet</dt><dd>${fmt(r[1])}</dd>
+        <dt>Personröster (kryss)</dt><dd>${fmt(r[0])}</dd>
+        <dt>Andel som kryssade</dt><dd>${r[1] ? pct(Math.round(1000 * r[0] / r[1]) / 10) : "–"}</dd>
+        <dt>Kryss längre ner än plats ${TOPP}</dt><dd>${pct(r[2])}</dd>
+      </dl>
+      ${r[0] < state.min ? `<p class="fotnot">Få kryss i distriktet, så andelarna kan svänga mycket av slumpen.</p>` : ""}
+      <p class="fotnot">Siffran före namnet är kandidatens plats på partiets lista.</p>`;
+  }
+  $("#detalj").innerHTML = `<article class="valsedel"><button class="stang" type="button" aria-label="Stäng">×</button>${inne}</article>`;
+  $("#detalj .stang").onclick = () => {
+    map.setFeatureState({ source: "vd", id: state.vald }, { vald: false });
+    state.vald = null; visaRaketer();
+  };
+}
+
+async function visaRaketer() {
+  const meta = partiMeta();
+  let lista;
+  try { lista = (await raketFil()).filter(k => k.parti === state.parti).slice(0, 25); }
+  catch (e) { lista = []; }
+  const beskrivning = state.kandidat ? "" : `<p class="ingress">${esc(MATT[state.matt].besk())} Klicka på ett distrikt för detaljer.</p>`;
+  if (!lista.length) {
+    $("#detalj").innerHTML = `${beskrivning}<h2>Inga röstraketer</h2>
+      <p class="ingress">Ingen kandidat under plats ${TOPP} för ${esc(meta?.namn)} fick tillräckligt många kryss för att komma med här.</p>`;
+    return;
+  }
+  $("#detalj").innerHTML = `${beskrivning}<h2>Största röstraketerna</h2>
+    <p class="ingress">Kandidater för ${esc(meta.namn)} under plats ${TOPP} på listan, sorterade efter antal kryss.
+    Klicka på ett namn för att se var kryssen kom ifrån.</p>
+    <ol class="raketer">${lista.map((k, i) => `<li><button type="button" data-i="${i}">
+      <span class="plats">${k.pos}<small>plats</small></span>
+      <span class="knamn">${esc(k.namn)}${k.sparr ? '<span class="sparr">över spärren</span>' : ""}</span>
+      <span class="kryss">${fmt(k.v)}</span>
+      <span class="kmeta">${esc(k.krets)}, ${pct(k.andel)} av partiets röster${k.hem ? `, bor i ${esc(k.hem)}` : ""}</span>
+    </button></li>`).join("")}</ol>`;
+  $("#detalj").querySelectorAll(".raketer button").forEach(b =>
+    b.onclick = () => visaKandidat(lista[+b.dataset.i]));
+}
+
+function visaKandidat(k) {
+  state.kandidat = k;
+  const b = [180, 90, -180, -90];
+  for (const kod of Object.keys(k.d)) {
+    const bb = bboxar.get(kod);
+    if (!bb) continue;
+    b[0] = Math.min(b[0], bb[0]); b[1] = Math.min(b[1], bb[1]);
+    b[2] = Math.max(b[2], bb[2]); b[3] = Math.max(b[3], bb[3]);
+  }
+  if (b[0] < b[2]) {
+    const lugn = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 50, maxZoom: 12, duration: lugn ? 0 : 900 });
+  }
+  rita(false);
+}
+
+start();
+</script>
+</body>
+</html>
